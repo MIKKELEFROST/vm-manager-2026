@@ -108,6 +108,15 @@
   .pager .perpage{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
   .pager select{width:auto;padding:7px 9px}
 
+  /* Status bar */
+  .status{display:flex;align-items:center;gap:18px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 18px;margin-bottom:14px}
+  .st-item{display:flex;align-items:center;gap:11px}
+  .st-sep{width:1px;align-self:stretch;background:var(--line)}
+  .st-l{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .st-v{font-size:14.5px;font-weight:800;color:var(--ink);margin-top:1px}
+  .st-ic{font-size:18px}
+  .dot{width:11px;height:11px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(10,125,60,.16);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(10,125,60,.35)}70%{box-shadow:0 0 0 7px rgba(10,125,60,0)}100%{box-shadow:0 0 0 0 rgba(10,125,60,0)}}
   footer{max-width:1280px;margin:0 auto 40px;padding:0 16px;color:var(--muted);font-size:12.5px}
   .nodata{padding:60px 20px;text-align:center;color:var(--warn)}
 
@@ -157,6 +166,18 @@
 </header>
 
 <main>
+  <div class="status" id="status">
+    <div class="st-item">
+      <span class="dot" aria-hidden="true"></span>
+      <div><div class="st-l">Data sidst opdateret</div><div class="st-v" id="st-updated">–</div></div>
+    </div>
+    <div class="st-sep" aria-hidden="true"></div>
+    <div class="st-item">
+      <span class="st-ic" aria-hidden="true">⏱</span>
+      <div><div class="st-l">Næste opdatering</div><div class="st-v" id="st-next">–</div></div>
+    </div>
+  </div>
+
   <div class="toolbar">
     <div class="controls">
       <div class="field search">
@@ -565,6 +586,53 @@ const DATASET = __DATASET__;
     $("q").value="";$("f-pos").value="";$("f-land").value="";$("f-out").value="";$("f-pmin").value="";$("f-pmax").value="";
     render();
   });
+
+  // ---- Data freshness status (last updated + next scheduled update) ----
+  (function statusBar(){
+    const updated = root.generatedISO ? new Date(root.generatedISO) : null;
+    const SLOTS=[1,3,5,7,9,19,21,23]; // danske timer: hver 2. time mellem 19 og 09
+    const TZ="Europe/Copenhagen";
+    const fmt=new Intl.DateTimeFormat("da-DK",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",timeZone:TZ});
+    function parts(tz,date){
+      const p={}; new Intl.DateTimeFormat("en-US",{timeZone:tz,hourCycle:"h23",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"})
+        .formatToParts(date).forEach(x=>p[x.type]=x.value);
+      return p;
+    }
+    function offsetMin(date){ // minutes Copenhagen is ahead of UTC at this instant
+      const p=parts(TZ,date);
+      return Math.round((Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute,+p.second)-date.getTime())/60000);
+    }
+    function nextUpdate(now){
+      const p=parts(TZ,now); const h=+p.hour;
+      let y=+p.year,mo=+p.month,d=+p.day, slot=SLOTS.find(s=>s>h);
+      if(slot===undefined){ slot=SLOTS[0]; const t=new Date(Date.UTC(y,mo-1,d)); t.setUTCDate(t.getUTCDate()+1); y=t.getUTCFullYear();mo=t.getUTCMonth()+1;d=t.getUTCDate(); }
+      const wallAsUTC=Date.UTC(y,mo-1,d,slot,0);
+      let inst=new Date(wallAsUTC-offsetMin(new Date(wallAsUTC))*60000);
+      inst=new Date(wallAsUTC-offsetMin(inst)*60000); // refine once for DST edges
+      return inst;
+    }
+    function rel(ms){
+      const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+      if(h>=24){const dd=Math.round(h/24);return "om "+dd+(dd===1?" dag":" dage");}
+      if(h>0) return "om "+h+" t "+m+" min";
+      if(m>0) return "om "+m+" min";
+      return "om under 1 min";
+    }
+    function ago(ms){
+      const s=Math.max(0,Math.round(ms/1000)), h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+      if(h>=24){const dd=Math.round(h/24);return "for "+dd+(dd===1?" dag":" dage")+" siden";}
+      if(h>0) return "for "+h+" t "+m+" min siden";
+      if(m>0) return "for "+m+" min siden";
+      return "lige nu";
+    }
+    function tick(){
+      const now=new Date();
+      $("st-updated").textContent = updated ? `${fmt.format(updated)} · ${ago(now-updated)}` : "ukendt";
+      const nu=nextUpdate(now);
+      $("st-next").textContent = `${fmt.format(nu)} · ${rel(nu-now)}`;
+    }
+    tick(); setInterval(tick,30000);
+  })();
 
   buildHeader();
   render();

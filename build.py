@@ -20,7 +20,7 @@ Usage:
   python build.py --force    # always build (manual / local runs)
 """
 import csv, json, re, sys, unicodedata, urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 try:
     from zoneinfo import ZoneInfo
 except Exception:
@@ -195,8 +195,8 @@ def merge(rows, live, standings):
     return matched
 
 
-def render(rows, stamp):
-    data = {"generated": stamp, "source": "Holdet.dk · VM Manager 2026",
+def render(rows, stamp, iso):
+    data = {"generated": stamp, "generatedISO": iso, "source": "Holdet.dk · VM Manager 2026",
             "columns": COLS, "rows": rows}
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     with open(TEMPLATE, encoding="utf-8") as f:
@@ -204,9 +204,6 @@ def render(rows, stamp):
     if html.count("__DATASET__") != 1:
         raise RuntimeError("template placeholder __DATASET__ not found exactly once")
     html = html.replace("__DATASET__", payload)
-    html = html.replace(
-        "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026",
-        f"Interaktivt datasæt · Kilde: Holdet.dk · Opdateret {stamp}", 1)
     with open(OUTPUT, "w", encoding="utf-8") as f:
         f.write(html)
     return len(html)
@@ -232,7 +229,8 @@ def main():
 
     matched = merge(rows, live, standings)
     stamp = now_stamp()
-    size = render(rows, stamp)
+    iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    size = render(rows, stamp, iso)
     print(f"Matched {matched}/{len(rows)} players · {len(standings)} VM teams · "
           f"wrote {OUTPUT} ({size:,} bytes) · {stamp}")
     return 0

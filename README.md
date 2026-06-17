@@ -40,6 +40,9 @@ bygger kun i det danske vindue: **hver 2. time mellem 19:00 og 09:00** (19, 21, 
 beregnet i `Europe/Copenhagen` så det holder under både sommer- og vintertid.
 Ændrer dataene sig, committes en ny `index.html`, og GitHub Pages redeployer automatisk.
 
+Øverst på siden vises tydeligt **Data sidst opdateret** (med relativ tid) og **Næste opdatering**
+(dansk tid med live-nedtælling) — beregnet klient-side ud fra det indlejrede UTC-tidsstempel og tidsplanen.
+
 - **Manuel opdatering:** kør workflowet "Opdater spillerdata" via *Actions*-fanen (Run workflow) — bygger altid.
 - Planlagte cron-jobs sættes automatisk på pause efter 60 dages inaktivitet i repoet (kør manuelt for at genaktivere).
 
