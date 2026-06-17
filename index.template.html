@@ -110,6 +110,32 @@
 
   footer{max-width:1280px;margin:0 auto 40px;padding:0 16px;color:var(--muted);font-size:12.5px}
   .nodata{padding:60px 20px;text-align:center;color:var(--warn)}
+
+  /* Modal */
+  .modal-overlay{position:fixed;inset:0;background:rgba(16,32,43,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;z-index:50;overflow:auto}
+  .modal-overlay[hidden]{display:none}
+  .modal{background:var(--panel);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.32);width:100%;max-width:780px;margin:auto;overflow:hidden}
+  .modal-head{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--line)}
+  .modal-head h2{margin:0;font-size:18px;font-weight:800}
+  .icon-btn{border:none;background:transparent;font-size:17px;line-height:1;color:var(--muted);padding:6px 9px;border-radius:8px;cursor:pointer}
+  .icon-btn:hover{background:#eef1f4;color:var(--ink)}
+  .modal-body{padding:18px 20px}
+  .modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  /* Column chooser */
+  .ck-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px 18px}
+  .ck{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;padding:4px 0}
+  .ck input{width:16px;height:16px;accent-color:var(--brand);cursor:pointer}
+  .ck input:disabled{cursor:default;opacity:.6}
+  /* TOTR pitch */
+  .totr-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:13px;color:var(--muted)}
+  .totr-meta b{color:var(--ink);font-weight:800}
+  .pitch{background:#1c9a55;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.06) 0 44px,transparent 44px 88px);border:2px solid #15803d;border-radius:14px;padding:18px 10px;display:flex;flex-direction:column;gap:16px}
+  .pitch-row{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+  .pp{background:#fff;border-radius:10px;padding:7px 9px;min-width:108px;max-width:130px;text-align:center;box-shadow:0 2px 7px rgba(0,0,0,.2)}
+  .pp .pos-tag{display:inline-block;font-size:10px;font-weight:700;color:#fff;background:rgba(0,0,0,.28);border-radius:4px;padding:1px 6px;margin-bottom:3px}
+  .pp .nm{font-weight:800;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pp .lc{font-size:11px;color:var(--muted);margin:1px 0 3px}
+  .pp .gr{font-size:13px;font-weight:800;color:var(--ok)}
   @media(max-width:640px){
     h1{font-size:17px}.scroll{max-height:64vh}
     thead th,tbody td{padding:8px 10px}
@@ -166,6 +192,8 @@
         <span class="count" id="count"></span>
       </div>
       <div class="left">
+        <button class="ghost" id="totr-btn">⚽ Team of the Round</button>
+        <button class="ghost" id="cols-btn">Kolonner</button>
         <button class="ghost" id="reset">Nulstil filtre</button>
         <button class="primary" id="export">Eksportér CSV</button>
       </div>
@@ -201,6 +229,16 @@
     </div>
   </div>
 </main>
+
+<div class="modal-overlay" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h2 id="modal-title"></h2>
+      <button class="icon-btn" id="modal-close" aria-label="Luk">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
 
 <footer>
   <p id="foot">Interaktivt datasæt genereret fra <code>spillere_world_manager_2026.xlsx</code>. Alle tal stammer fra Holdet.dk · VM Manager 2026.</p>
@@ -267,8 +305,19 @@ const DATASET = __DATASET__;
   fillSelect("f-land","Land");
 
   // ---- State ----
+  // ---- Column visibility (persisted) ----
+  const VKEY="holdet_visible_v1";
+  const ALL_KEYS=COLS.map(c=>c.key);
+  const MINIMAL=["Navn","Position","Pris","Vækst","Værdi-indeks","Popularitet"];
+  function loadVisible(){
+    try{ const s=JSON.parse(localStorage.getItem(VKEY)); if(Array.isArray(s)){ const set=new Set(s.filter(k=>ALL_KEYS.includes(k))); set.add("Navn"); if(set.size>1) return set; } }catch(e){}
+    return new Set(ALL_KEYS);
+  }
+  function saveVisible(){ try{ localStorage.setItem(VKEY, JSON.stringify([...state.visible])); }catch(e){} }
+  function visibleCols(){ return COLS.filter(c=>state.visible.has(c.key)); }
+
   const state = { q:"", pos:"", land:"", out:"", pmin:null, pmax:null,
-                  sortKey:"Vækst", sortDir:-1, page:1, perPage:50 };
+                  sortKey:"Vækst", sortDir:-1, page:1, perPage:50, visible:loadVisible() };
 
   // ---- Formatting per column type ----
   function fmt(col,val){
@@ -308,23 +357,26 @@ const DATASET = __DATASET__;
     return fmt(col,v);
   }
 
-  // ---- Build header ----
+  // ---- Build header (respects column visibility) ----
   const head=$("head");
-  COLS.forEach(col=>{
-    const th=document.createElement("th");
-    const isNum=NUMERIC.has(col.type);
-    if(isNum) th.className="num";
-    th.dataset.key=col.key;
-    th.innerHTML=`<span class="th">${escapeHtml(col.label)}<span class="sortcue">▲▼</span></span>`;
-    th.setAttribute("scope","col");
-    th.setAttribute("title",(col.hint? col.hint+" · " : "")+"Klik for at sortere");
-    th.addEventListener("click",()=>{
-      if(state.sortKey===col.key){ state.sortDir*=-1; }
-      else { state.sortKey=col.key; state.sortDir = isNum?-1:1; }
-      state.page=1; render();
+  function buildHeader(){
+    head.innerHTML="";
+    visibleCols().forEach(col=>{
+      const th=document.createElement("th");
+      const isNum=NUMERIC.has(col.type);
+      if(isNum) th.className="num";
+      th.dataset.key=col.key;
+      th.innerHTML=`<span class="th">${escapeHtml(col.label)}<span class="sortcue">▲▼</span></span>`;
+      th.setAttribute("scope","col");
+      th.setAttribute("title",(col.hint? col.hint+" · " : "")+"Klik for at sortere");
+      th.addEventListener("click",()=>{
+        if(state.sortKey===col.key){ state.sortDir*=-1; }
+        else { state.sortKey=col.key; state.sortDir = isNum?-1:1; }
+        state.page=1; render();
+      });
+      head.appendChild(th);
     });
-    head.appendChild(th);
-  });
+  }
 
   // ---- Filtering + sorting pipeline ----
   function getFiltered(){
@@ -372,10 +424,11 @@ const DATASET = __DATASET__;
     // body
     const body=$("body");
     if(!slice.length){
-      body.innerHTML=`<tr><td colspan="${COLS.length}"><div class="empty">Ingen spillere matcher dine filtre.</div></td></tr>`;
+      body.innerHTML=`<tr><td colspan="${visibleCols().length}"><div class="empty">Ingen spillere matcher dine filtre.</div></td></tr>`;
     } else {
+      const cols=visibleCols();
       const rowsHtml=slice.map(r=>{
-        const tds=COLS.map(col=>{
+        const tds=cols.map(col=>{
           const cls=cellClass(col)+(col.key==="Navn"?" name":"");
           return `<td class="${cls}">${renderCell(col,r)}</td>`;
         }).join("");
@@ -421,8 +474,9 @@ const DATASET = __DATASET__;
   // ---- CSV export (current filtered+sorted set) ----
   function exportCSV(){
     const sep=";";
-    const header=COLS.map(c=>c.label).join(sep);
-    const lines=current.map(r=>COLS.map(c=>{
+    const cols=visibleCols();
+    const header=cols.map(c=>c.label).join(sep);
+    const lines=current.map(r=>cols.map(c=>{
       let v=r[c.key];
       if(v===null||v===undefined) v="";
       let s=String(v);
@@ -437,6 +491,64 @@ const DATASET = __DATASET__;
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),1500);
   }
+
+  // ---- Modal (generic popup) ----
+  const modal=$("modal"), modalBody=$("modal-body"), modalTitle=$("modal-title");
+  function openModal(title){ modalTitle.textContent=title; modal.hidden=false; document.body.style.overflow="hidden"; $("modal-close").focus(); }
+  function closeModal(){ modal.hidden=true; document.body.style.overflow=""; }
+  $("modal-close").addEventListener("click",closeModal);
+  modal.addEventListener("click",e=>{ if(e.target===modal) closeModal(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!modal.hidden) closeModal(); });
+
+  // ---- Team of the Round (3-4-3, størst vækst, spilbare spillere) ----
+  function pickTOTR(){
+    const avail=ROWS.filter(r=>r["Ude af spil"]!=="Ja" && typeof r["Vækst"]==="number");
+    const top=(posDa,n)=>avail.filter(r=>r.Position===posDa).sort((a,b)=>b["Vækst"]-a["Vækst"]).slice(0,n);
+    return [
+      {players:top("Angreb",3)},
+      {players:top("Midtbane",4)},
+      {players:top("Forsvar",3)},
+      {players:top("Keeper",1)},
+    ];
+  }
+  function totrCard(p){
+    return `<div class="pp"><div class="pos-tag">${escapeHtml(p.Position||"")}</div>`+
+      `<div class="nm" title="${escapeHtml(p.Navn)}">${escapeHtml(p.Navn)}</div>`+
+      `<div class="lc">${escapeHtml(p.Land||"")} · €${nf.format(p.Pris||0)}</div>`+
+      `<div class="gr">+€${nf.format(p["Vækst"]||0)}</div></div>`;
+  }
+  function openTOTR(){
+    const rowsT=pickTOTR();
+    const all=rowsT.flatMap(r=>r.players);
+    const sum=all.reduce((s,p)=>s+(p["Vækst"]||0),0);
+    const pitch=rowsT.map(r=>`<div class="pitch-row">${r.players.map(totrCard).join("")}</div>`).join("");
+    modalBody.innerHTML=
+      `<div class="totr-meta"><span>Formation <b>3-4-3</b></span><span>Spillere <b>${all.length}</b></span>`+
+      `<span>Samlet vækst <b>+€${nf.format(sum)}</b></span></div>`+
+      `<div class="pitch">${pitch}</div>`+
+      `<p style="margin:12px 0 0;font-size:12px;color:var(--muted)">Spillerne med størst prisstigning (Vækst) pr. position. "Ude af spil" er udeladt.</p>`;
+    openModal("⚽ Team of the Round");
+  }
+
+  // ---- Column chooser ----
+  function openCols(){
+    modalBody.innerHTML=
+      `<div class="ck-grid">`+COLS.map(c=>
+        `<label class="ck"><input type="checkbox" data-k="${escapeHtml(c.key)}" ${state.visible.has(c.key)?"checked":""} ${c.key==="Navn"?"disabled":""}>${escapeHtml(c.label)}</label>`
+      ).join("")+`</div>`+
+      `<div class="modal-actions"><button id="ck-all">Vis alle</button><button id="ck-min">Kun nøgletal</button></div>`;
+    modalBody.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.addEventListener("change",()=>{
+      if(cb.checked) state.visible.add(cb.dataset.k); else state.visible.delete(cb.dataset.k);
+      state.visible.add("Navn"); saveVisible(); buildHeader(); render();
+    }));
+    const apply=keys=>{ state.visible=new Set(keys); state.visible.add("Navn"); saveVisible(); buildHeader(); render(); openCols(); };
+    $("ck-all").addEventListener("click",()=>apply(ALL_KEYS));
+    $("ck-min").addEventListener("click",()=>apply(MINIMAL));
+    openModal("Vælg kolonner");
+  }
+
+  $("totr-btn").addEventListener("click",openTOTR);
+  $("cols-btn").addEventListener("click",openCols);
 
   // ---- Events ----
   let t=null;
@@ -454,6 +566,7 @@ const DATASET = __DATASET__;
     render();
   });
 
+  buildHeader();
   render();
 })();
 </script>

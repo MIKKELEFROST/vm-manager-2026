@@ -13,6 +13,12 @@ Tabellen leder med beslutnings-data (værdi + VM-form); land/rang/position er sk
 Runde 1-3 og Program R1-3 er farvekodet efter modstandersværhedsgrad (rød = stærk modstander → grøn = svag),
 udledt af modstanderens nationale seedning (`Rang` 1-48). Beregnes i selve siden, så det følger med ved hver opdatering.
 
+Værktøjslinjen har desuden:
+- **⚽ Team of the Round** — popup med en 3-4-3 (3 angreb · 4 midtbane · 3 forsvar · 1 keeper) bygget af spillerne
+  med størst Vækst pr. position (spillere "ude af spil" udeladt). Beregnes live af de aktuelle data.
+- **Kolonner** — popup hvor man til/fravælger viste kolonner (Navn er altid med). Valget gemmes i browseren
+  (localStorage) og styrer både tabellen og CSV-eksporten. Presets: "Vis alle" og "Kun nøgletal".
+
 | Kilde | Kolonner |
 |------|----------|
 | **Live** – API `/games/616/players` | Pris, **Vækst** (pris − startpris), Popularitet, Ude af spil |
