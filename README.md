@@ -10,6 +10,8 @@ Siden er en enkelt, selvstændig `index.html` med søgning, sortering, filtre, p
 `index.html` genereres af [`build.py`](build.py), som fletter to kilder:
 
 Tabellen leder med beslutnings-data (værdi + VM-form); land/rang/position er skubbet til højre.
+Runde 1-3 og Program R1-3 er farvekodet efter modstandersværhedsgrad (rød = stærk modstander → grøn = svag),
+udledt af modstanderens nationale seedning (`Rang` 1-48). Beregnes i selve siden, så det følger med ved hver opdatering.
 
 | Kilde | Kolonner |
 |------|----------|

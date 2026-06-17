@@ -88,6 +88,16 @@
   .down{color:var(--warn);font-weight:700}
   .flat{color:var(--muted)}
   .bar{display:inline-block;height:7px;border-radius:4px;background:var(--brand);vertical-align:middle;margin-left:8px;min-width:2px}
+  .fix{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12.5px;font-weight:700;white-space:nowrap}
+  .fix .fxd{font-weight:500;opacity:.7;font-size:11.5px;margin-left:4px}
+  .fdr-5{background:#f6cfcb;color:#7d1a13}
+  .fdr-4{background:#f7ddc0;color:#7c4a12}
+  .fdr-3{background:#f3ecbe;color:#6a5c0e}
+  .fdr-2{background:#dcefcb;color:#356323}
+  .fdr-1{background:#c3e6bb;color:#1c5e1c}
+  .legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px}
+  .legend .lgl{color:var(--muted);font-weight:700;margin-right:2px}
+  .legend .fix{min-width:26px;text-align:center}
   .empty{padding:48px 20px;text-align:center;color:var(--muted)}
 
   /* Pagination */
@@ -160,6 +170,14 @@
         <button class="primary" id="export">Eksportér CSV</button>
       </div>
     </div>
+    <div class="legend" aria-label="Forklaring: modstandersværhedsgrad i runde 1-3">
+      <span class="lgl">Modstander-sværhedsgrad (Runde 1-3):</span>
+      <span class="fix fdr-5">Svær</span>
+      <span class="fix fdr-4">&nbsp;</span>
+      <span class="fix fdr-3">Middel</span>
+      <span class="fix fdr-2">&nbsp;</span>
+      <span class="fix fdr-1">Let</span>
+    </div>
   </div>
 
   <div class="tablecard">
@@ -213,6 +231,21 @@ const DATASET = __DATASET__;
   // ---- Derived meta for header pills ----
   const distinct = (k)=>{const s=new Set();for(const r of ROWS){const v=r[k];if(v!==null&&v!==""&&v!==undefined)s.add(v);}return [...s];};
   const nLande = distinct("Land").length;
+
+  // ---- Opponent difficulty (from each nation's seeding "Rang", 1=best..48=worst) ----
+  const rangByLand={};
+  ROWS.forEach(r=>{ if(r.Land!=null && r.Rang!=null) rangByLand[r.Land]=r.Rang; });
+  const FIX_LABEL={5:"meget svær",4:"svær",3:"middel",2:"let",1:"meget let"};
+  function fixTier(rg){ if(rg==null) return 0; if(rg<=10) return 5; if(rg<=20) return 4; if(rg<=30) return 3; if(rg<=40) return 2; return 1; }
+  function renderFixture(v){
+    if(v===null||v===undefined||v==="") return '<span class="muted">–</span>';
+    const m=String(v).match(/^(.+?)\s+(\d{1,2}\/\d{1,2})$/);
+    const opp=m?m[1].trim():String(v).trim();
+    const date=m?m[2]:"";
+    const rg=rangByLand[opp]; const t=fixTier(rg);
+    const tip=t?`${opp} · seedning ${rg} · ${FIX_LABEL[t]}`:opp;
+    return `<span class="fix${t?(' fdr-'+t):''}" title="${escapeHtml(tip)}">${escapeHtml(opp)}${date?`<span class="fxd">${escapeHtml(date)}</span>`:""}</span>`;
+  }
   const maxVaekst = ROWS.reduce((m,r)=>Math.max(m, r["Vækst"]||0),0);
   const maxVI = ROWS.reduce((m,r)=>Math.max(m, r["Værdi-indeks"]||0),0);
   $("subline").textContent = "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026";
@@ -266,6 +299,11 @@ const DATASET = __DATASET__;
     if(col.key==="Popularitet" && typeof v==="number"){
       const w=Math.max(2,Math.round(v/0.35*60));
       return `${nf1.format(v*100)} %<span class="bar" style="width:${w}px"></span>`;
+    }
+    if(col.key==="Runde 1"||col.key==="Runde 2"||col.key==="Runde 3") return renderFixture(v);
+    if(col.key==="Program R1-3" && typeof v==="number"){
+      const c=v<=1.66?"fdr-5":(v<=2.33?"fdr-3":"fdr-1");
+      return `<span class="fix ${c}" title="Samlet sværhedsgrad runde 1-3 (1=svær … 3=let)">${nf1.format(v)}</span>`;
     }
     return fmt(col,v);
   }
