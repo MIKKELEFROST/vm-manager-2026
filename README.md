@@ -3,7 +3,7 @@
 Interaktiv, hostet tabel over spillerdata fra Holdet.dk's **VM World Manager 2026** (game id 616).
 Siden er en enkelt, selvstændig `index.html` med søgning, sortering, filtre, paginering og CSV-eksport.
 
-🌐 **Live:** _(GitHub Pages-URL indsættes efter første deploy)_
+🌐 **Live:** https://mikkelefrost.github.io/vm-manager-2026/
 
 ## Hvordan live-opdatering virker
 
