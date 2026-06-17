@@ -9,16 +9,21 @@ Siden er en enkelt, selvstændig `index.html` med søgning, sortering, filtre, p
 
 `index.html` genereres af [`build.py`](build.py), som fletter to kilder:
 
+Tabellen leder med beslutnings-data (værdi + VM-form); land/rang/position er skubbet til højre.
+
 | Kilde | Kolonner |
 |------|----------|
-| **Live** – Holdet's offentlige API (`/api/games/616/players`) | Pris, Popularitet, Ude af spil |
+| **Live** – API `/games/616/players` | Pris, **Vækst** (pris − startpris), Popularitet, Ude af spil |
+| **VM** – API `/games/616/standings` | Gruppe, placering, kampe, grp.-point, målforskel (hold-niveau, joinet på land) |
 | **Statisk** – `spillere_world_manager_2026.csv` | Land, Rang, Markedsværdi, Program R1-3, Runde 1-3, Position |
 
 `Værdi-indeks` genberegnes som `Markedsværdi / Pris`. Spillere matches på normaliseret navn
-(diakritiske tegn og kælenavne fjernes) — alle 1.522 spillere matcher API'et.
+(diakritiske tegn og kælenavne fjernes) — alle 1.522 spillere matcher API'et, alle 48 nationer matcher standings.
 
-> **Bemærk:** Kun de live-kolonner opdateres automatisk. Markedsværdi (Transfermarkt), Rang og
-> kampprogram er ikke i API'et og forbliver på de sidst manuelt opdaterede værdier i CSV'en.
+> **Bemærk:** API'et har ingen individuelle spillerstats (mål/assists/point findes ikke offentligt).
+> `Vækst` er den bedste individuelle form-indikator (Holdet hæver prisen når en spiller præsterer);
+> VM-stats er derfor på holdniveau. Markedsværdi (Transfermarkt), Rang og kampprogram er statiske
+> og opdateres ved at erstatte CSV'en.
 
 ## Tidsplan
 

@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-Build index.html for the VM Manager 2026 player table.
+Build index.html for the VM Manager 2026 player research table.
 
-Combines two sources:
+Sources:
   * STATIC  (committed spillere_world_manager_2026.csv): Land, Rang, Markedsvaerdi,
-            Program R1-3, Runde 1-3, Position  -- not available from the API.
-  * LIVE    (Holdet public API, game 616):            Pris, Popularitet, Ude af spil
-            matched onto the static rows by normalized player name.
+            Program R1-3, Runde 1-3, Position.
+  * LIVE    (Holdet API /games/616/players): Pris, Vaekst (price-startPrice),
+            Popularitet, Ude af spil -- matched onto static rows by normalized name.
+  * VM      (Holdet API /games/616/standings): per-nation group-stage stats
+            (gruppe, placering, kampe, point, maalforskel) -- joined by Danish team name.
 
-Vaerdi-indeks is recomputed as Markedsvaerdi / Pris (matches the XLSX formula).
+Vaerdi-indeks is recomputed as Markedsvaerdi / Pris.
 
-The committed CSV stays the authoritative player set (1522 players) so the table
-mirrors the user's sheet; only the live-changing fields are refreshed.
+The committed CSV stays the authoritative player set (1522 players); the table
+leads with value/form + VM stats (what you research to pick a team).
 
 Usage:
-  python build.py            # scheduled run: only proceeds during the Danish update window
+  python build.py            # scheduled: only builds inside the Danish update window
   python build.py --force    # always build (manual / local runs)
 """
 import csv, json, re, sys, unicodedata, urllib.request
@@ -24,38 +26,55 @@ try:
 except Exception:
     ZoneInfo = None
 
-API_URL  = "https://nexus-app-fantasy.holdet.dk/api/games/616/players"
+PLAYERS_URL   = "https://nexus-app-fantasy.holdet.dk/api/games/616/players"
+STANDINGS_URL = "https://nexus-app-fantasy.holdet.dk/api/games/616/standings"
 CSV_FILE = "spillere_world_manager_2026.csv"
 TEMPLATE = "index.template.html"
 OUTPUT   = "index.html"
 
-# Danish local hours at which a scheduled run should actually rebuild:
-# every 2 hours between 19:00 and 09:00 (19,21,23,01,03,05,07,09).
+# Danish local hours at which a scheduled run rebuilds (every 2h, 19:00-09:00).
 TARGET_HOURS = {19, 21, 23, 1, 3, 5, 7, 9}
 
+# Column order = focus. Value + form + VM stats first; land/rang/program last.
 COLS = [
-    {"key": "Navn",          "label": "Navn",              "type": "text"},
-    {"key": "Land",          "label": "Land",              "type": "text", "filter": "select"},
-    {"key": "Rang",          "label": "Rang",              "type": "int",
+    {"key": "Navn",         "label": "Navn",          "type": "text"},
+    {"key": "Position",     "label": "Position",      "type": "text", "filter": "select"},
+    {"key": "Pris",         "label": "Pris (€)",      "type": "money",
+     "hint": "Nuværende holdpris (tæller mod budgettet)"},
+    {"key": "Vækst",        "label": "Vækst (€)",     "type": "delta",
+     "hint": "Prisændring siden VM-start — markedets reaktion på form"},
+    {"key": "Værdi-indeks", "label": "Værdi-indeks",  "type": "float",
+     "hint": "Markedsværdi delt med pris — værdi for pengene"},
+    {"key": "Popularitet",  "label": "Popularitet",   "type": "pct",
+     "hint": "Andel managers der har valgt spilleren"},
+    {"key": "Markedsværdi", "label": "Markedsværdi (€)", "type": "money",
+     "hint": "Reel transferværdi (Transfermarkt)"},
+    {"key": "Gruppe",       "label": "Gruppe",        "type": "text",
+     "hint": "Nationens VM-gruppe"},
+    {"key": "VMPlac",       "label": "Plac.",         "type": "int",
+     "hint": "Nationens placering i VM-gruppen"},
+    {"key": "VMKampe",      "label": "Kampe",         "type": "int",
+     "hint": "VM-kampe spillet af nationen"},
+    {"key": "VMPoint",      "label": "Grp.-point",    "type": "int",
+     "hint": "Nationens point i gruppespillet"},
+    {"key": "VMMaalforskel", "label": "Målforskel",   "type": "int",
+     "hint": "Nationens VM-målforskel (mål for − imod)"},
+    {"key": "Ude af spil",  "label": "Ude af spil",   "type": "text", "filter": "select"},
+    {"key": "Land",         "label": "Land",          "type": "text", "filter": "select"},
+    {"key": "Rang",         "label": "Rang",          "type": "int",
      "hint": "Nationens seedning 1-48 (deles af alle spillere fra samme land)"},
-    {"key": "Position",      "label": "Position",          "type": "text", "filter": "select"},
-    {"key": "Pris",          "label": "Pris (€)",          "type": "money"},
-    {"key": "Markedsværdi",  "label": "Markedsværdi (€)",   "type": "money"},
-    {"key": "Værdi-indeks",  "label": "Værdi-indeks",        "type": "float"},
-    {"key": "Popularitet",   "label": "Popularitet",       "type": "pct"},
-    {"key": "Ude af spil",   "label": "Ude af spil",       "type": "text", "filter": "select"},
-    {"key": "Program R1-3",  "label": "Program R1-3",      "type": "float"},
-    {"key": "Runde 1",       "label": "Runde 1",           "type": "text"},
-    {"key": "Runde 2",       "label": "Runde 2",           "type": "text"},
-    {"key": "Runde 3",       "label": "Runde 3",           "type": "text"},
+    {"key": "Program R1-3", "label": "Program R1-3",  "type": "float",
+     "hint": "Kampprogrammets sværhedsgrad runde 1-3 (1=svær … 3=let)"},
+    {"key": "Runde 1",      "label": "Runde 1",       "type": "text"},
+    {"key": "Runde 2",      "label": "Runde 2",       "type": "text"},
+    {"key": "Runde 3",      "label": "Runde 3",       "type": "text"},
 ]
 
-# CSV header -> (row key, parser)
+# CSV header -> (row key, parser) for the static columns
 SRC = {
     "Navn": ("Navn", "text"), "Land": ("Land", "text"), "Rang": ("Rang", "int"),
     "Position": ("Position", "text"), "Pris": ("Pris", "int"),
     "Markedsværdi (EUR)": ("Markedsværdi", "int"),
-    "Værdi-indeks": ("Værdi-indeks", "float"),
     "Popularitet": ("Popularitet", "float"), "Ude af spil": ("Ude af spil", "text"),
     "Program R1-3": ("Program R1-3", "float"),
     "Runde 1": ("Runde 1", "text"), "Runde 2": ("Runde 2", "text"), "Runde 3": ("Runde 3", "text"),
@@ -90,28 +109,107 @@ def in_window():
     if "--force" in sys.argv:
         return True
     if ZoneInfo is None:
-        return True  # fail open if tz database is unavailable
-    hour = datetime.now(ZoneInfo("Europe/Copenhagen")).hour
-    return hour in TARGET_HOURS
+        return True
+    return datetime.now(ZoneInfo("Europe/Copenhagen")).hour in TARGET_HOURS
 
 
-def fetch_api():
-    req = urllib.request.Request(API_URL, headers={"User-Agent": "vm-manager-2026-builder"})
+def now_stamp():
+    if ZoneInfo:
+        return datetime.now(ZoneInfo("Europe/Copenhagen")).strftime("%Y-%m-%d %H:%M")
+    return datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+
+
+def fetch_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "vm-manager-2026-builder"})
     with urllib.request.urlopen(req, timeout=30) as r:
-        data = json.load(r)
-    persons = data.get("_embedded", {}).get("persons", {})
+        return json.load(r)
+
+
+def load_static_rows():
+    rows = []
+    with open(CSV_FILE, encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f, delimiter=";"):
+            rows.append({key: parse(r.get(src, ""), t) for src, (key, t) in SRC.items()})
+    return rows
+
+
+def parse_players(api):
+    persons = api.get("_embedded", {}).get("persons", {})
     live = {}
-    for it in data.get("items", []):
-        p = persons.get(str(it.get("personId"))) or persons.get(it.get("personId")) or {}
+    for it in api.get("items", []):
+        p = persons.get(str(it.get("personId"))) or {}
         name = ((p.get("firstName") or "") + " " + (p.get("lastName") or "")).strip()
         if not name:
             continue
+        price, start = it.get("price"), it.get("startPrice")
         live[norm(name)] = {
-            "price": it.get("price"),
+            "price": price,
+            "vaekst": (price - start) if (price is not None and start is not None) else None,
             "pop": it.get("popularity"),
             "out": bool(it.get("isOut")),
         }
     return live
+
+
+def parse_standings(st):
+    """Danish team name -> group-stage stats."""
+    teams = {}
+    for grp in st:
+        g = (grp.get("name") or "").upper()
+        for r in grp.get("rankings", []):
+            name = (r.get("team") or {}).get("name")
+            if not name:
+                continue
+            teams[name] = {
+                "group": g, "rank": r.get("rank"), "matches": r.get("matches"),
+                "points": r.get("points"),
+                "gd": (r.get("goalsFor") or 0) - (r.get("goalsAgainst") or 0),
+            }
+    return teams
+
+
+def merge(rows, live, standings):
+    matched = 0
+    for obj in rows:
+        hit = live.get(norm(obj["Navn"]))
+        if hit:
+            matched += 1
+            if hit["price"] is not None:
+                obj["Pris"] = hit["price"]
+            obj["Vækst"] = hit["vaekst"]
+            if hit["pop"] is not None:
+                obj["Popularitet"] = hit["pop"]
+            obj["Ude af spil"] = "Ja" if hit["out"] else "Nej"
+        else:
+            obj["Vækst"] = None
+        # VM team stats by Danish land name
+        vm = standings.get(obj.get("Land"))
+        obj["Gruppe"]        = vm["group"]   if vm else None
+        obj["VMPlac"]        = vm["rank"]    if vm else None
+        obj["VMKampe"]       = vm["matches"] if vm else None
+        obj["VMPoint"]       = vm["points"]  if vm else None
+        obj["VMMaalforskel"] = vm["gd"]      if vm else None
+        # value index = market value / price
+        mv, pris = obj.get("Markedsværdi"), obj.get("Pris")
+        obj["Værdi-indeks"] = round(mv / pris, 2) if (mv and pris) else None
+    return matched
+
+
+def render(rows, stamp):
+    data = {"generated": stamp, "source": "Holdet.dk · VM Manager 2026",
+            "columns": COLS, "rows": rows}
+    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    with open(TEMPLATE, encoding="utf-8") as f:
+        html = f.read()
+    if html.count("__DATASET__") != 1:
+        raise RuntimeError("template placeholder __DATASET__ not found exactly once")
+    html = html.replace("__DATASET__", payload)
+    html = html.replace(
+        "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026",
+        f"Interaktivt datasæt · Kilde: Holdet.dk · Opdateret {stamp}", 1)
+    with open(OUTPUT, "w", encoding="utf-8") as f:
+        f.write(html)
+    return len(html)
 
 
 def main():
@@ -120,60 +218,23 @@ def main():
         print(f"Skip: Copenhagen hour {h} not in update window {sorted(TARGET_HOURS)}")
         return 0
 
-    # 1. static rows from the committed CSV (authoritative player set)
-    rows = []
-    with open(CSV_FILE, encoding="utf-8-sig") as f:
-        for r in csv.DictReader(f, delimiter=";"):
-            obj = {key: parse(r.get(src, ""), t) for src, (key, t) in SRC.items()}
-            rows.append(obj)
-
-    # 2. live fields from the API
+    rows = load_static_rows()
     try:
-        live = fetch_api()
+        live = parse_players(fetch_json(PLAYERS_URL))
+        standings = parse_standings(fetch_json(STANDINGS_URL))
     except Exception as e:
         print(f"ERROR: API fetch failed ({e}); leaving {OUTPUT} unchanged", file=sys.stderr)
         return 1
-    if len(live) < 500:
-        print(f"ERROR: API returned only {len(live)} players; aborting to avoid corrupting data", file=sys.stderr)
+    if len(live) < 500 or len(standings) < 40:
+        print(f"ERROR: suspiciously little data (players={len(live)}, teams={len(standings)}); aborting",
+              file=sys.stderr)
         return 1
 
-    # 3. merge live onto static rows by normalized name
-    matched = 0
-    for obj in rows:
-        hit = live.get(norm(obj["Navn"]))
-        if hit:
-            matched += 1
-            if hit["price"] is not None:
-                obj["Pris"] = hit["price"]
-            if hit["pop"] is not None:
-                obj["Popularitet"] = hit["pop"]
-            obj["Ude af spil"] = "Ja" if hit["out"] else "Nej"
-        # recompute value index = market value / price
-        mv, pris = obj.get("Markedsværdi"), obj.get("Pris")
-        obj["Værdi-indeks"] = round(mv / pris, 2) if (mv and pris) else None
-
-    stamp = datetime.now(ZoneInfo("Europe/Copenhagen")).strftime("%Y-%m-%d %H:%M") if ZoneInfo \
-        else datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    print(f"Matched {matched}/{len(rows)} players to live API data.")
-
-    data = {"generated": stamp, "source": "Holdet.dk · VM Manager 2026",
-            "columns": COLS, "rows": rows}
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-
-    with open(TEMPLATE, encoding="utf-8") as f:
-        html = f.read()
-    if html.count("__DATASET__") != 1:
-        print("ERROR: template placeholder __DATASET__ not found exactly once", file=sys.stderr)
-        return 1
-    html = html.replace("__DATASET__", payload)
-    # surface the data freshness in the page subtitle
-    html = html.replace(
-        'Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026',
-        f'Interaktivt datasæt · Kilde: Holdet.dk · Opdateret {stamp}', 1)
-
-    with open(OUTPUT, "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"Wrote {OUTPUT} ({len(html):,} bytes) · generated {stamp}")
+    matched = merge(rows, live, standings)
+    stamp = now_stamp()
+    size = render(rows, stamp)
+    print(f"Matched {matched}/{len(rows)} players · {len(standings)} VM teams · "
+          f"wrote {OUTPUT} ({size:,} bytes) · {stamp}")
     return 0
 
 

@@ -84,6 +84,9 @@
   .pos-Angreb{background:#ffe6e6;color:#a32020}
   .out-ja{color:var(--warn);font-weight:700}
   .out-nej{color:var(--muted)}
+  .up{color:var(--ok);font-weight:700}
+  .down{color:var(--warn);font-weight:700}
+  .flat{color:var(--muted)}
   .bar{display:inline-block;height:7px;border-radius:4px;background:var(--brand);vertical-align:middle;margin-left:8px;min-width:2px}
   .empty{padding:48px 20px;text-align:center;color:var(--muted)}
 
@@ -205,18 +208,19 @@ const DATASET = __DATASET__;
 
   const nf = new Intl.NumberFormat("da-DK");
   const nf1 = new Intl.NumberFormat("da-DK",{minimumFractionDigits:1,maximumFractionDigits:2});
-  const NUMERIC = new Set(["int","float","money","pct"]);
+  const NUMERIC = new Set(["int","float","money","pct","delta"]);
 
   // ---- Derived meta for header pills ----
   const distinct = (k)=>{const s=new Set();for(const r of ROWS){const v=r[k];if(v!==null&&v!==""&&v!==undefined)s.add(v);}return [...s];};
   const nLande = distinct("Land").length;
-  const maxMV = ROWS.reduce((m,r)=>Math.max(m, r["Markedsværdi"]||0),0);
+  const maxVaekst = ROWS.reduce((m,r)=>Math.max(m, r["Vækst"]||0),0);
+  const maxVI = ROWS.reduce((m,r)=>Math.max(m, r["Værdi-indeks"]||0),0);
   $("subline").textContent = "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026";
   $("pills").innerHTML = [
     ['Spillere', nf.format(ROWS.length)],
+    ['Største stigning', '+€'+nf.format(maxVaekst)],
+    ['Bedste værdi-indeks', nf1.format(maxVI)],
     ['Nationer', nf.format(nLande)],
-    ['Højeste markedsværdi', '€'+nf.format(maxMV)],
-    ['Kolonner', nf.format(COLS.length)],
   ].map(([a,b])=>`<span class="pill">${a}: <b>${b}</b></span>`).join("");
 
   // ---- Populate select filters ----
@@ -231,7 +235,7 @@ const DATASET = __DATASET__;
 
   // ---- State ----
   const state = { q:"", pos:"", land:"", out:"", pmin:null, pmax:null,
-                  sortKey:"Markedsværdi", sortDir:-1, page:1, perPage:50 };
+                  sortKey:"Vækst", sortDir:-1, page:1, perPage:50 };
 
   // ---- Formatting per column type ----
   function fmt(col,val){
@@ -241,6 +245,7 @@ const DATASET = __DATASET__;
       case "int":   return nf.format(val);
       case "float": return nf1.format(val);
       case "pct":   return nf1.format(val*100)+" %";
+      case "delta": { const s=val>0?"+":(val<0?"−":""); return s+nf.format(Math.abs(val)); }
       default:      return escapeHtml(String(val));
     }
   }
@@ -253,6 +258,11 @@ const DATASET = __DATASET__;
     const v=r[col.key];
     if(col.key==="Position" && v) return `<span class="chip pos-${v}">${escapeHtml(v)}</span>`;
     if(col.key==="Ude af spil") return `<span class="${v==='Ja'?'out-ja':'out-nej'}">${escapeHtml(v||'–')}</span>`;
+    if(col.key==="Vækst"){
+      if(v===null||v===undefined) return '<span class="muted">–</span>';
+      const cls=v>0?"up":(v<0?"down":"flat"); const s=v>0?"+":(v<0?"−":"");
+      return `<span class="${cls}">${s}${nf.format(Math.abs(v))}</span>`;
+    }
     if(col.key==="Popularitet" && typeof v==="number"){
       const w=Math.max(2,Math.round(v/0.35*60));
       return `${nf1.format(v*100)} %<span class="bar" style="width:${w}px"></span>`;
