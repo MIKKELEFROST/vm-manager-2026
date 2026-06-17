@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VM Manager 2026 – Spillerdata · Holdet.dk</title>
+<style>
+  :root{
+    --bg:#eef1f4; --panel:#ffffff; --ink:#16202b; --muted:#5d6b7a; --line:#e2e7ec;
+    --brand:#0a7d3c; --brand-d:#055f2c; --brand-l:#e8f5ec; --accent:#0b6bcb;
+    --warn:#c0392b; --warn-bg:#fdecea; --ok:#0a7d3c;
+    --radius:12px; --shadow:0 1px 2px rgba(16,32,43,.06),0 8px 24px rgba(16,32,43,.06);
+    --row:#ffffff; --row-alt:#f7f9fb; --hover:#eef6f0;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+
+  /* Header */
+  header{background:linear-gradient(135deg,var(--brand-d),var(--brand));color:#fff;padding:22px 20px 18px}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 16px}
+  .brand{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .logo{width:38px;height:38px;border-radius:9px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-weight:800;font-size:18px;letter-spacing:-1px}
+  h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.3px}
+  .sub{margin:4px 0 0;color:rgba(255,255,255,.82);font-size:13px}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .pill{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:600}
+  .pill b{font-weight:800}
+
+  /* Toolbar */
+  main{max-width:1280px;margin:18px auto 40px;padding:0 16px}
+  .toolbar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;display:grid;gap:12px}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end}
+  .field{display:flex;flex-direction:column;gap:5px;min-width:0}
+  .field label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .field.search{grid-column:1/-1}
+  input[type=text],input[type=number],select{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
+    font-size:14px;font-family:var(--sans);transition:border-color .15s,box-shadow .15s}
+  input:focus,select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-l)}
+  .search-box{position:relative}
+  .search-box input{padding-left:36px}
+  .search-box svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.45}
+  .price-range{display:flex;align-items:center;gap:7px}
+  .price-range input{padding:9px 8px}
+  .price-range span{color:var(--muted);font-size:12px}
+
+  .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+  .actions .left{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .count{font-size:13.5px;color:var(--muted)}
+  .count b{color:var(--ink);font-weight:800}
+  button{font-family:var(--sans);cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);
+    padding:9px 14px;border-radius:9px;font-size:13.5px;font-weight:700;transition:.15s}
+  button:hover{border-color:#c7cfd7;background:#fbfcfd}
+  button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--brand-l);border-color:var(--brand)}
+  button.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  button.primary:hover{background:var(--brand-d);border-color:var(--brand-d)}
+  button.ghost{background:transparent}
+
+  /* Table */
+  .tablecard{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+  .scroll{overflow:auto;max-height:72vh}
+  table{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+  thead th{position:sticky;top:0;z-index:2;background:#f3f6f8;color:var(--ink);text-align:left;
+    font-size:12px;font-weight:800;letter-spacing:.2px;padding:11px 12px;border-bottom:2px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+  thead th.num{text-align:right}
+  thead th .th{display:inline-flex;align-items:center;gap:5px}
+  thead th.num .th{flex-direction:row-reverse}
+  .sortcue{font-size:10px;opacity:.35;transition:.15s}
+  th[aria-sort="ascending"] .sortcue,th[aria-sort="descending"] .sortcue{opacity:1;color:var(--brand)}
+  th[aria-sort] .th{color:var(--brand-d)}
+  tbody td{padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tbody tr:nth-child(even){background:var(--row-alt)}
+  tbody tr:hover{background:var(--hover)}
+  td.name{font-weight:700}
+  td.muted{color:var(--muted)}
+  .chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid transparent}
+  .pos-Keeper{background:#fff3d6;color:#8a5a00}
+  .pos-Forsvar{background:#e1f0ff;color:#0b4f8a}
+  .pos-Midtbane{background:#e6f6ea;color:#0a6a34}
+  .pos-Angreb{background:#ffe6e6;color:#a32020}
+  .out-ja{color:var(--warn);font-weight:700}
+  .out-nej{color:var(--muted)}
+  .bar{display:inline-block;height:7px;border-radius:4px;background:var(--brand);vertical-align:middle;margin-left:8px;min-width:2px}
+  .empty{padding:48px 20px;text-align:center;color:var(--muted)}
+
+  /* Pagination */
+  .pager{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;flex-wrap:wrap;border-top:1px solid var(--line);background:#fafcfd}
+  .pager .pages{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+  .pager button{padding:7px 11px;min-width:38px}
+  .pager button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .pager .perpage{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+  .pager select{width:auto;padding:7px 9px}
+
+  footer{max-width:1280px;margin:0 auto 40px;padding:0 16px;color:var(--muted);font-size:12.5px}
+  .nodata{padding:60px 20px;text-align:center;color:var(--warn)}
+  @media(max-width:640px){
+    h1{font-size:17px}.scroll{max-height:64vh}
+    thead th,tbody td{padding:8px 10px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">H</div>
+      <div>
+        <h1>VM Manager 2026 — Spillerdata</h1>
+        <p class="sub" id="subline">Interaktivt datasæt · Kilde: Holdet.dk</p>
+      </div>
+    </div>
+    <div class="pills" id="pills"></div>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="controls">
+      <div class="field search">
+        <label for="q">Søg spiller</label>
+        <div class="search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input type="text" id="q" placeholder="Navn eller land…" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="f-pos">Position</label>
+        <select id="f-pos"><option value="">Alle positioner</option></select>
+      </div>
+      <div class="field">
+        <label for="f-land">Land</label>
+        <select id="f-land"><option value="">Alle lande</option></select>
+      </div>
+      <div class="field">
+        <label for="f-out">Ude af spil</label>
+        <select id="f-out"><option value="">Alle</option><option value="Nej">Kun spilbare</option><option value="Ja">Kun ude af spil</option></select>
+      </div>
+      <div class="field">
+        <label>Pris (€)</label>
+        <div class="price-range">
+          <input type="number" id="f-pmin" placeholder="min" step="500000" aria-label="Minimumspris">
+          <span>–</span>
+          <input type="number" id="f-pmax" placeholder="max" step="500000" aria-label="Maksimumspris">
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <div class="left">
+        <span class="count" id="count"></span>
+      </div>
+      <div class="left">
+        <button class="ghost" id="reset">Nulstil filtre</button>
+        <button class="primary" id="export">Eksportér CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tablecard">
+    <div class="scroll">
+      <table id="tbl">
+        <thead><tr id="head"></tr></thead>
+        <tbody id="body"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <div class="perpage">
+        Rækker pr. side:
+        <select id="perpage" aria-label="Rækker pr. side">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="99999">Alle</option>
+        </select>
+      </div>
+      <div class="pages" id="pages"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p id="foot">Interaktivt datasæt genereret fra <code>spillere_world_manager_2026.xlsx</code>. Alle tal stammer fra Holdet.dk · VM Manager 2026.</p>
+</footer>
+
+<script>
+/* Data injected at build time. Shape: { generated:"…", columns:[{key,label,type,filter}], rows:[{...}] } */
+const DATASET = __DATASET__;
+</script>
+<script>
+(function(){
+  "use strict";
+  const root = DATASET || {};
+  const COLS = root.columns || [];
+  const ROWS = root.rows || [];
+  const $ = (id)=>document.getElementById(id);
+
+  if(!COLS.length || !ROWS.length){
+    document.querySelector("main").innerHTML =
+      '<div class="tablecard"><div class="nodata">Kunne ikke indlæse data. Tjek at datasættet er indlejret korrekt.</div></div>';
+    return;
+  }
+
+  const nf = new Intl.NumberFormat("da-DK");
+  const nf1 = new Intl.NumberFormat("da-DK",{minimumFractionDigits:1,maximumFractionDigits:2});
+  const NUMERIC = new Set(["int","float","money","pct"]);
+
+  // ---- Derived meta for header pills ----
+  const distinct = (k)=>{const s=new Set();for(const r of ROWS){const v=r[k];if(v!==null&&v!==""&&v!==undefined)s.add(v);}return [...s];};
+  const nLande = distinct("Land").length;
+  const maxMV = ROWS.reduce((m,r)=>Math.max(m, r["Markedsværdi"]||0),0);
+  $("subline").textContent = "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026";
+  $("pills").innerHTML = [
+    ['Spillere', nf.format(ROWS.length)],
+    ['Nationer', nf.format(nLande)],
+    ['Højeste markedsværdi', '€'+nf.format(maxMV)],
+    ['Kolonner', nf.format(COLS.length)],
+  ].map(([a,b])=>`<span class="pill">${a}: <b>${b}</b></span>`).join("");
+
+  // ---- Populate select filters ----
+  function fillSelect(id,key,sortNum){
+    const sel=$(id);
+    let vals=distinct(key);
+    vals.sort(sortNum?((a,b)=>a-b):((a,b)=>(""+a).localeCompare(""+b,"da")));
+    for(const v of vals){const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);}
+  }
+  fillSelect("f-pos","Position");
+  fillSelect("f-land","Land");
+
+  // ---- State ----
+  const state = { q:"", pos:"", land:"", out:"", pmin:null, pmax:null,
+                  sortKey:"Markedsværdi", sortDir:-1, page:1, perPage:50 };
+
+  // ---- Formatting per column type ----
+  function fmt(col,val){
+    if(val===null||val===undefined||val==="") return '<span class="muted">–</span>';
+    switch(col.type){
+      case "money": return nf.format(val);
+      case "int":   return nf.format(val);
+      case "float": return nf1.format(val);
+      case "pct":   return nf1.format(val*100)+" %";
+      default:      return escapeHtml(String(val));
+    }
+  }
+  function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+  function cellClass(col){return NUMERIC.has(col.type)?"num":"";}
+
+  // Special render for some columns (chips etc.)
+  function renderCell(col,r){
+    const v=r[col.key];
+    if(col.key==="Position" && v) return `<span class="chip pos-${v}">${escapeHtml(v)}</span>`;
+    if(col.key==="Ude af spil") return `<span class="${v==='Ja'?'out-ja':'out-nej'}">${escapeHtml(v||'–')}</span>`;
+    if(col.key==="Popularitet" && typeof v==="number"){
+      const w=Math.max(2,Math.round(v/0.35*60));
+      return `${nf1.format(v*100)} %<span class="bar" style="width:${w}px"></span>`;
+    }
+    return fmt(col,v);
+  }
+
+  // ---- Build header ----
+  const head=$("head");
+  COLS.forEach(col=>{
+    const th=document.createElement("th");
+    const isNum=NUMERIC.has(col.type);
+    if(isNum) th.className="num";
+    th.dataset.key=col.key;
+    th.innerHTML=`<span class="th">${escapeHtml(col.label)}<span class="sortcue">▲▼</span></span>`;
+    th.setAttribute("scope","col");
+    th.setAttribute("title",(col.hint? col.hint+" · " : "")+"Klik for at sortere");
+    th.addEventListener("click",()=>{
+      if(state.sortKey===col.key){ state.sortDir*=-1; }
+      else { state.sortKey=col.key; state.sortDir = isNum?-1:1; }
+      state.page=1; render();
+    });
+    head.appendChild(th);
+  });
+
+  // ---- Filtering + sorting pipeline ----
+  function getFiltered(){
+    const q=state.q.trim().toLowerCase();
+    return ROWS.filter(r=>{
+      if(q && !(String(r["Navn"]).toLowerCase().includes(q) || String(r["Land"]).toLowerCase().includes(q))) return false;
+      if(state.pos && r["Position"]!==state.pos) return false;
+      if(state.land && r["Land"]!==state.land) return false;
+      if(state.out && r["Ude af spil"]!==state.out) return false;
+      if(state.pmin!=null && (r["Pris"]==null || r["Pris"]<state.pmin)) return false;
+      if(state.pmax!=null && (r["Pris"]==null || r["Pris"]>state.pmax)) return false;
+      return true;
+    });
+  }
+  function sortRows(rows){
+    const col=COLS.find(c=>c.key===state.sortKey);
+    const num=col&&NUMERIC.has(col.type);
+    const k=state.sortKey, dir=state.sortDir;
+    return rows.slice().sort((a,b)=>{
+      let x=a[k], y=b[k];
+      const xe=(x===null||x===undefined||x===""), ye=(y===null||y===undefined||y==="");
+      if(xe&&ye) return 0; if(xe) return 1; if(ye) return -1;   // empties always last
+      if(num) return (x-y)*dir;
+      return String(x).localeCompare(String(y),"da")*dir;
+    });
+  }
+
+  // ---- Render ----
+  let current=[]; // filtered+sorted (full set, for export)
+  function render(){
+    current = sortRows(getFiltered());
+    const total=current.length;
+    const per=state.perPage;
+    const pages=Math.max(1,Math.ceil(total/per));
+    if(state.page>pages) state.page=pages;
+    const start=(state.page-1)*per;
+    const slice=current.slice(start, start+per);
+
+    // header aria-sort
+    [...head.children].forEach(th=>{
+      if(th.dataset.key===state.sortKey) th.setAttribute("aria-sort",state.sortDir===1?"ascending":"descending");
+      else th.removeAttribute("aria-sort");
+    });
+
+    // body
+    const body=$("body");
+    if(!slice.length){
+      body.innerHTML=`<tr><td colspan="${COLS.length}"><div class="empty">Ingen spillere matcher dine filtre.</div></td></tr>`;
+    } else {
+      const rowsHtml=slice.map(r=>{
+        const tds=COLS.map(col=>{
+          const cls=cellClass(col)+(col.key==="Navn"?" name":"");
+          return `<td class="${cls}">${renderCell(col,r)}</td>`;
+        }).join("");
+        return `<tr>${tds}</tr>`;
+      }).join("");
+      body.innerHTML=rowsHtml;
+    }
+
+    // count
+    const shown = slice.length ? `${nf.format(start+1)}–${nf.format(start+slice.length)}` : "0";
+    $("count").innerHTML = `Viser <b>${shown}</b> af <b>${nf.format(total)}</b> spillere`;
+
+    renderPager(pages);
+  }
+
+  function renderPager(pages){
+    const box=$("pages"); box.innerHTML="";
+    const cur=state.page;
+    const mk=(label,page,opts={})=>{
+      const b=document.createElement("button");
+      b.textContent=label;
+      if(opts.active){ b.classList.add("active"); b.setAttribute("aria-current","page"); }
+      if(opts.disabled){b.disabled=true;b.style.opacity=.4;b.style.cursor="default";}
+      if(opts.aria) b.setAttribute("aria-label",opts.aria);
+      b.addEventListener("click",()=>{state.page=page;render();const sc=document.querySelector(".scroll");if(sc)sc.scrollTop=0;});
+      return b;
+    };
+    box.appendChild(mk("‹",cur-1,{disabled:cur<=1,aria:"Forrige side"}));
+    const win=[];
+    const add=(p)=>{if(p>=1&&p<=pages&&!win.includes(p))win.push(p);};
+    add(1);add(2);add(pages-1);add(pages);
+    for(let p=cur-1;p<=cur+1;p++)add(p);
+    win.sort((a,b)=>a-b);
+    let prev=0;
+    win.forEach(p=>{
+      if(prev && p-prev>1){const s=document.createElement("span");s.textContent="…";s.style.padding="0 4px";s.style.color="var(--muted)";box.appendChild(s);}
+      box.appendChild(mk(String(p),p,{active:p===cur}));
+      prev=p;
+    });
+    box.appendChild(mk("›",cur+1,{disabled:cur>=pages,aria:"Næste side"}));
+  }
+
+  // ---- CSV export (current filtered+sorted set) ----
+  function exportCSV(){
+    const sep=";";
+    const header=COLS.map(c=>c.label).join(sep);
+    const lines=current.map(r=>COLS.map(c=>{
+      let v=r[c.key];
+      if(v===null||v===undefined) v="";
+      let s=String(v);
+      if(s.includes(sep)||s.includes('"')||s.includes("\n")) s='"'+s.replace(/"/g,'""')+'"';
+      return s;
+    }).join(sep));
+    const csv="﻿"+header+"\r\n"+lines.join("\r\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download="holdet_vm_manager_2026_filtreret.csv";
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+  }
+
+  // ---- Events ----
+  let t=null;
+  $("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(()=>{state.q=e.target.value;state.page=1;render();},180);});
+  $("f-pos").addEventListener("change",e=>{state.pos=e.target.value;state.page=1;render();});
+  $("f-land").addEventListener("change",e=>{state.land=e.target.value;state.page=1;render();});
+  $("f-out").addEventListener("change",e=>{state.out=e.target.value;state.page=1;render();});
+  $("f-pmin").addEventListener("input",e=>{state.pmin=e.target.value===""?null:+e.target.value;state.page=1;render();});
+  $("f-pmax").addEventListener("input",e=>{state.pmax=e.target.value===""?null:+e.target.value;state.page=1;render();});
+  $("perpage").addEventListener("change",e=>{state.perPage=+e.target.value;state.page=1;render();});
+  $("export").addEventListener("click",exportCSV);
+  $("reset").addEventListener("click",()=>{
+    state.q="";state.pos="";state.land="";state.out="";state.pmin=null;state.pmax=null;state.page=1;
+    $("q").value="";$("f-pos").value="";$("f-land").value="";$("f-out").value="";$("f-pmin").value="";$("f-pmax").value="";
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

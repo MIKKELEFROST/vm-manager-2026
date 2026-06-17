@@ -1,0 +1,46 @@
+name: Opdater spillerdata
+
+# GitHub-cron kører i UTC. Vi trigger hver time, men build.py bygger kun i det
+# danske vindue (hver 2. time mellem 19:00 og 09:00 — 19,21,23,01,03,05,07,09),
+# beregnet ud fra Europe/Copenhagen, så det rammer rigtigt under både sommer- og vintertid.
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: opdater-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Byg index.html fra live API
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python build.py --force
+          else
+            python build.py
+          fi
+
+      - name: Commit og push hvis ændret
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- index.html; then
+            git add index.html
+            git commit -m "Auto-opdater spillerdata ($(TZ=Europe/Copenhagen date '+%Y-%m-%d %H:%M'))"
+            git push
+          else
+            echo "Ingen ændringer i index.html — springer commit over."
+          fi
