@@ -23,6 +23,10 @@ Værktøjslinjen har desuden:
   kort, holdresultat osv.) + forklaring af præstation vs. handelspres. Kilde: FantasyLeague.gg / Holdets fodbold-model.
 - **Spiller-popup** — klik på en spiller for værdi/form, vækst pr. runde, VM-holdstats og kampprogram.
 
+### Filtre
+Position og Land er **multi-select** (afkrydsnings-dropdowns) — vælg flere på én gang. Land har et søgefelt
+(48 nationer). "Ude af spil" og pris-interval er enkeltvalg. "Nulstil filtre" rydder alt.
+
 ### Handelstendens
 Kolonnen **Tendens** (`trend` fra seneste spillede runde) viser hvor meget en spiller bliver købt lige nu
 (0 = ingen efterspørgsel; højere = mere efterspurgt) — et leading-signal for kommende prisstigning.

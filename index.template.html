@@ -34,7 +34,7 @@
   .toolbar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;display:grid;gap:12px}
   .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end}
   .field{display:flex;flex-direction:column;gap:5px;min-width:0}
-  .field label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .field>label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
   .field.search{grid-column:1/-1}
   input[type=text],input[type=number],select{
     width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);
@@ -46,6 +46,22 @@
   .price-range{display:flex;align-items:center;gap:7px}
   .price-range input{padding:9px 8px}
   .price-range span{color:var(--muted);font-size:12px}
+  .ms{position:relative}
+  .ms-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--ink);font-size:14px;font-weight:500;cursor:pointer;text-align:left}
+  .ms-btn:hover{border-color:#c7cfd7}
+  .ms-btn.active{border-color:var(--brand);background:var(--brand-l)}
+  .ms-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--brand-l);border-color:var(--brand)}
+  .ms-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ms-caret{color:var(--muted);font-size:11px}
+  .ms-panel{position:absolute;z-index:40;top:calc(100% + 4px);left:0;right:0;min-width:210px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 30px rgba(16,32,43,.18);padding:8px;max-height:320px;display:flex;flex-direction:column}
+  .ms-panel[hidden]{display:none}
+  .ms-search{margin-bottom:6px}
+  .ms-list{overflow:auto;display:flex;flex-direction:column;gap:1px}
+  .ms-opt{display:flex;align-items:center;gap:9px;padding:6px 7px;border-radius:7px;font-size:14px;font-weight:500;text-transform:none;letter-spacing:0;color:var(--ink);cursor:pointer}
+  .ms-opt:hover{background:var(--row-alt)}
+  .ms-opt input{width:16px;height:16px;accent-color:var(--brand);cursor:pointer}
+  .ms-actions{display:flex;justify-content:flex-end;margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
+  .ms-empty{padding:8px 7px;color:var(--muted);font-size:13px}
 
   .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between}
   .actions .left{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -223,12 +239,25 @@
         </div>
       </div>
       <div class="field">
-        <label for="f-pos">Position</label>
-        <select id="f-pos"><option value="">Alle positioner</option></select>
+        <label id="ms-pos-lbl">Position</label>
+        <div class="ms" id="ms-pos">
+          <button class="ms-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-labelledby="ms-pos-lbl"><span class="ms-text">Alle positioner</span><span class="ms-caret">▾</span></button>
+          <div class="ms-panel" hidden>
+            <div class="ms-list"></div>
+            <div class="ms-actions"><button type="button" class="ghost ms-clear">Ryd valg</button></div>
+          </div>
+        </div>
       </div>
       <div class="field">
-        <label for="f-land">Land</label>
-        <select id="f-land"><option value="">Alle lande</option></select>
+        <label id="ms-land-lbl">Land</label>
+        <div class="ms" id="ms-land">
+          <button class="ms-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-labelledby="ms-land-lbl"><span class="ms-text">Alle lande</span><span class="ms-caret">▾</span></button>
+          <div class="ms-panel" hidden>
+            <input type="text" class="ms-search" placeholder="Søg land…" aria-label="Søg land">
+            <div class="ms-list"></div>
+            <div class="ms-actions"><button type="button" class="ghost ms-clear">Ryd valg</button></div>
+          </div>
+        </div>
       </div>
       <div class="field">
         <label for="f-out">Ude af spil</label>
@@ -367,15 +396,34 @@ const DATASET = __DATASET__;
     ['Nationer', nf.format(nLande)],
   ].map(([a,b])=>`<span class="pill">${a}: <b>${b}</b></span>`).join("");
 
-  // ---- Populate select filters ----
-  function fillSelect(id,key,sortNum){
-    const sel=$(id);
-    let vals=distinct(key);
-    vals.sort(sortNum?((a,b)=>a-b):((a,b)=>(""+a).localeCompare(""+b,"da")));
-    for(const v of vals){const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);}
+  // ---- Multi-select filters (Position, Land) ----
+  function initMulti(id, values, allLabel, noun, withSearch, onChange){
+    const root=$(id), btn=root.querySelector(".ms-btn"), panel=root.querySelector(".ms-panel"),
+          text=root.querySelector(".ms-text"), list=root.querySelector(".ms-list");
+    const sel=new Set();
+    list.innerHTML=values.map(v=>`<label class="ms-opt"><input type="checkbox" value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</label>`).join("");
+    function relabel(){
+      text.textContent = sel.size===0?allLabel : (sel.size===1?[...sel][0] : sel.size+" "+noun);
+      btn.classList.toggle("active", sel.size>0);
+    }
+    list.addEventListener("change",e=>{ const cb=e.target; if(cb.type!=="checkbox") return; cb.checked?sel.add(cb.value):sel.delete(cb.value); relabel(); onChange(); });
+    root.querySelector(".ms-clear").addEventListener("click",()=>{ sel.clear(); list.querySelectorAll("input").forEach(c=>c.checked=false); relabel(); onChange(); });
+    btn.addEventListener("click",e=>{ e.stopPropagation(); const willOpen=panel.hidden;
+      document.querySelectorAll(".ms-panel").forEach(p=>p.hidden=true);
+      document.querySelectorAll(".ms-btn").forEach(b=>b.setAttribute("aria-expanded","false"));
+      panel.hidden=!willOpen; btn.setAttribute("aria-expanded",String(willOpen));
+      if(willOpen && withSearch){ const s=root.querySelector(".ms-search"); if(s){ s.value=""; s.dispatchEvent(new Event("input")); s.focus(); } }
+    });
+    panel.addEventListener("click",e=>e.stopPropagation());
+    if(withSearch){ const s=root.querySelector(".ms-search"); s.addEventListener("input",()=>{ const q=s.value.toLowerCase();
+      list.querySelectorAll(".ms-opt").forEach(o=>{ o.style.display=o.textContent.toLowerCase().includes(q)?"":"none"; }); }); }
+    relabel();
+    return { set:sel, reset(){ sel.clear(); list.querySelectorAll("input").forEach(c=>c.checked=false); relabel(); } };
   }
-  fillSelect("f-pos","Position");
-  fillSelect("f-land","Land");
+  document.addEventListener("click",()=>{ document.querySelectorAll(".ms-panel").forEach(p=>p.hidden=true); document.querySelectorAll(".ms-btn").forEach(b=>b.setAttribute("aria-expanded","false")); });
+  const byDa=(a,b)=>(""+a).localeCompare(""+b,"da");
+  const posMulti = initMulti("ms-pos", distinct("Position").sort(byDa), "Alle positioner", "positioner", false, ()=>{state.page=1;render();});
+  const landMulti = initMulti("ms-land", distinct("Land").sort(byDa), "Alle lande", "lande", true, ()=>{state.page=1;render();});
 
   // ---- State ----
   // ---- Column visibility (persisted) ----
@@ -389,7 +437,7 @@ const DATASET = __DATASET__;
   function saveVisible(){ try{ localStorage.setItem(VKEY, JSON.stringify([...state.visible])); }catch(e){} }
   function visibleCols(){ return COLS.filter(c=>state.visible.has(c.key)); }
 
-  const state = { q:"", pos:"", land:"", out:"", pmin:null, pmax:null,
+  const state = { q:"", out:"", pmin:null, pmax:null,
                   sortKey:"Vækst", sortDir:-1, page:1, perPage:50, visible:loadVisible() };
 
   // ---- Formatting per column type ----
@@ -457,8 +505,8 @@ const DATASET = __DATASET__;
     const q=state.q.trim().toLowerCase();
     return ROWS.filter(r=>{
       if(q && !(String(r["Navn"]).toLowerCase().includes(q) || String(r["Land"]).toLowerCase().includes(q))) return false;
-      if(state.pos && r["Position"]!==state.pos) return false;
-      if(state.land && r["Land"]!==state.land) return false;
+      if(posMulti.set.size && !posMulti.set.has(r["Position"])) return false;
+      if(landMulti.set.size && !landMulti.set.has(r["Land"])) return false;
       if(state.out && r["Ude af spil"]!==state.out) return false;
       if(state.pmin!=null && (r["Pris"]==null || r["Pris"]<state.pmin)) return false;
       if(state.pmax!=null && (r["Pris"]==null || r["Pris"]>state.pmax)) return false;
@@ -706,16 +754,15 @@ const DATASET = __DATASET__;
   // ---- Events ----
   let t=null;
   $("q").addEventListener("input",e=>{clearTimeout(t);t=setTimeout(()=>{state.q=e.target.value;state.page=1;render();},180);});
-  $("f-pos").addEventListener("change",e=>{state.pos=e.target.value;state.page=1;render();});
-  $("f-land").addEventListener("change",e=>{state.land=e.target.value;state.page=1;render();});
   $("f-out").addEventListener("change",e=>{state.out=e.target.value;state.page=1;render();});
   $("f-pmin").addEventListener("input",e=>{state.pmin=e.target.value===""?null:+e.target.value;state.page=1;render();});
   $("f-pmax").addEventListener("input",e=>{state.pmax=e.target.value===""?null:+e.target.value;state.page=1;render();});
   $("perpage").addEventListener("change",e=>{state.perPage=+e.target.value;state.page=1;render();});
   $("export").addEventListener("click",exportCSV);
   $("reset").addEventListener("click",()=>{
-    state.q="";state.pos="";state.land="";state.out="";state.pmin=null;state.pmax=null;state.page=1;
-    $("q").value="";$("f-pos").value="";$("f-land").value="";$("f-out").value="";$("f-pmin").value="";$("f-pmax").value="";
+    state.q="";state.out="";state.pmin=null;state.pmax=null;state.page=1;
+    posMulti.reset(); landMulti.reset();
+    $("q").value="";$("f-out").value="";$("f-pmin").value="";$("f-pmax").value="";
     render();
   });
 
