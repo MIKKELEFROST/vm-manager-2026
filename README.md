@@ -19,6 +19,14 @@ Værktøjslinjen har desuden:
 - **Kolonner** — popup hvor man til/fravælger viste kolonner (Navn er altid med). Valget gemmes i browseren
   (localStorage) og styrer både tabellen og CSV-eksporten. Presets: "Standard" og "Vis alle".
   Standard-visningen er Navn, Pris, Vækst, Popularitet, Program R1-3 og Runde 1-3.
+- **📋 Pointsystem** (øverst til højre) — popup med Holdets vækstregler (mål pr. position, assist, clean sheet,
+  kort, holdresultat osv.) + forklaring af præstation vs. handelspres. Kilde: FantasyLeague.gg / Holdets fodbold-model.
+- **Spiller-popup** — klik på en spiller for værdi/form, vækst pr. runde, VM-holdstats og kampprogram.
+
+### Spillede runder & vækst pr. runde
+Per-runde-vækst hentes fra `/games/616/rounds/{n}/players` (`priceChange`). En spillet runde markeres i kampprogrammet
+med ✓ og rundens vækst (fx ▲ +620k); runder der ikke er spillet endnu viser kun modstander + dato. `meta.roundsPlayed`
+afgør hvilke runder der er afgjort. Kolonnerne `Vækst R1/R2/R3` kan slås til via "Kolonner".
 
 | Kilde | Kolonner |
 |------|----------|

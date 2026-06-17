@@ -28,6 +28,8 @@ except Exception:
 
 PLAYERS_URL   = "https://nexus-app-fantasy.holdet.dk/api/games/616/players"
 STANDINGS_URL = "https://nexus-app-fantasy.holdet.dk/api/games/616/standings"
+ROUND_URL     = "https://nexus-app-fantasy.holdet.dk/api/games/616/rounds/{n}/players"
+ROUNDS        = [1, 2, 3]  # de runder vi har kampprogram for; tomme indtil de spilles
 CSV_FILE = "spillere_world_manager_2026.csv"
 TEMPLATE = "index.template.html"
 OUTPUT   = "index.html"
@@ -42,7 +44,13 @@ COLS = [
     {"key": "Pris",         "label": "Pris (€)",      "type": "money",
      "hint": "Nuværende holdpris (tæller mod budgettet)"},
     {"key": "Vækst",        "label": "Vækst (€)",     "type": "delta",
-     "hint": "Prisændring siden VM-start — markedets reaktion på form"},
+     "hint": "Samlet prisændring siden VM-start — markedets reaktion på form"},
+    {"key": "VækstR1",      "label": "Vækst R1",      "type": "delta",
+     "hint": "Prisændring i runde 1"},
+    {"key": "VækstR2",      "label": "Vækst R2",      "type": "delta",
+     "hint": "Prisændring i runde 2 (vises når runden er spillet)"},
+    {"key": "VækstR3",      "label": "Vækst R3",      "type": "delta",
+     "hint": "Prisændring i runde 3 (vises når runden er spillet)"},
     {"key": "Værdi-indeks", "label": "Værdi-indeks",  "type": "float",
      "hint": "Markedsværdi delt med pris — værdi for pengene"},
     {"key": "Popularitet",  "label": "Popularitet",   "type": "pct",
@@ -144,11 +152,32 @@ def parse_players(api):
         price, start = it.get("price"), it.get("startPrice")
         live[norm(name)] = {
             "price": price,
+            "start": start,
             "vaekst": (price - start) if (price is not None and start is not None) else None,
             "pop": it.get("popularity"),
             "out": bool(it.get("isOut")),
         }
     return live
+
+
+def person_norm_map(api):
+    """personId (str) -> normalized name, for matching the per-round endpoints."""
+    m = {}
+    for pid, p in api.get("_embedded", {}).get("persons", {}).items():
+        name = ((p.get("firstName") or "") + " " + (p.get("lastName") or "")).strip()
+        if name:
+            m[str(pid)] = norm(name)
+    return m
+
+
+def parse_round(rj, pmap):
+    """round-players json -> {normName: priceChange}; empty dict if round not played yet."""
+    out = {}
+    for it in rj.get("items", []):
+        nn = pmap.get(str(it.get("personId")))
+        if nn and it.get("priceChange") is not None:
+            out[nn] = it["priceChange"]
+    return out
 
 
 def parse_standings(st):
@@ -168,20 +197,26 @@ def parse_standings(st):
     return teams
 
 
-def merge(rows, live, standings):
+def merge(rows, live, standings, round_growth):
     matched = 0
     for obj in rows:
-        hit = live.get(norm(obj["Navn"]))
+        nn = norm(obj["Navn"])
+        hit = live.get(nn)
         if hit:
             matched += 1
             if hit["price"] is not None:
                 obj["Pris"] = hit["price"]
             obj["Vækst"] = hit["vaekst"]
+            obj["startPris"] = hit["start"]
             if hit["pop"] is not None:
                 obj["Popularitet"] = hit["pop"]
             obj["Ude af spil"] = "Ja" if hit["out"] else "Nej"
         else:
             obj["Vækst"] = None
+            obj["startPris"] = None
+        # per-round growth (priceChange) — None until the round is played
+        for n in ROUNDS:
+            obj["VækstR" + str(n)] = (round_growth.get(n) or {}).get(nn)
         # VM team stats by Danish land name
         vm = standings.get(obj.get("Land"))
         obj["Gruppe"]        = vm["group"]   if vm else None
@@ -195,9 +230,9 @@ def merge(rows, live, standings):
     return matched
 
 
-def render(rows, stamp, iso):
+def render(rows, stamp, iso, rounds_played):
     data = {"generated": stamp, "generatedISO": iso, "source": "Holdet.dk · VM Manager 2026",
-            "columns": COLS, "rows": rows}
+            "roundsPlayed": rounds_played, "columns": COLS, "rows": rows}
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     with open(TEMPLATE, encoding="utf-8") as f:
         html = f.read()
@@ -217,8 +252,20 @@ def main():
 
     rows = load_static_rows()
     try:
-        live = parse_players(fetch_json(PLAYERS_URL))
+        api = fetch_json(PLAYERS_URL)
+        live = parse_players(api)
+        pmap = person_norm_map(api)
         standings = parse_standings(fetch_json(STANDINGS_URL))
+        round_growth, rounds_played = {}, []
+        for n in ROUNDS:
+            try:
+                rj = fetch_json(ROUND_URL.format(n=n))
+            except Exception:
+                rj = {"items": []}
+            rg = parse_round(rj, pmap)
+            round_growth[n] = rg
+            if rg:
+                rounds_played.append(n)
     except Exception as e:
         print(f"ERROR: API fetch failed ({e}); leaving {OUTPUT} unchanged", file=sys.stderr)
         return 1
@@ -227,12 +274,12 @@ def main():
               file=sys.stderr)
         return 1
 
-    matched = merge(rows, live, standings)
+    matched = merge(rows, live, standings, round_growth)
     stamp = now_stamp()
     iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    size = render(rows, stamp, iso)
+    size = render(rows, stamp, iso, rounds_played)
     print(f"Matched {matched}/{len(rows)} players · {len(standings)} VM teams · "
-          f"wrote {OUTPUT} ({size:,} bytes) · {stamp}")
+          f"runder spillet {rounds_played} · wrote {OUTPUT} ({size:,} bytes) · {stamp}")
     return 0
 
 
