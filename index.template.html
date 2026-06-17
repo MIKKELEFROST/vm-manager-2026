@@ -327,12 +327,12 @@ const DATASET = __DATASET__;
 
   // ---- State ----
   // ---- Column visibility (persisted) ----
-  const VKEY="holdet_visible_v1";
+  const VKEY="holdet_visible_v2";
   const ALL_KEYS=COLS.map(c=>c.key);
-  const MINIMAL=["Navn","Position","Pris","Vækst","Værdi-indeks","Popularitet"];
+  const DEFAULT_VISIBLE=["Navn","Pris","Vækst","Popularitet","Program R1-3","Runde 1","Runde 2","Runde 3"];
   function loadVisible(){
     try{ const s=JSON.parse(localStorage.getItem(VKEY)); if(Array.isArray(s)){ const set=new Set(s.filter(k=>ALL_KEYS.includes(k))); set.add("Navn"); if(set.size>1) return set; } }catch(e){}
-    return new Set(ALL_KEYS);
+    return new Set(DEFAULT_VISIBLE);
   }
   function saveVisible(){ try{ localStorage.setItem(VKEY, JSON.stringify([...state.visible])); }catch(e){} }
   function visibleCols(){ return COLS.filter(c=>state.visible.has(c.key)); }
@@ -557,14 +557,14 @@ const DATASET = __DATASET__;
       `<div class="ck-grid">`+COLS.map(c=>
         `<label class="ck"><input type="checkbox" data-k="${escapeHtml(c.key)}" ${state.visible.has(c.key)?"checked":""} ${c.key==="Navn"?"disabled":""}>${escapeHtml(c.label)}</label>`
       ).join("")+`</div>`+
-      `<div class="modal-actions"><button id="ck-all">Vis alle</button><button id="ck-min">Kun nøgletal</button></div>`;
+      `<div class="modal-actions"><button id="ck-std">Standard</button><button id="ck-all">Vis alle</button></div>`;
     modalBody.querySelectorAll("input[type=checkbox]").forEach(cb=>cb.addEventListener("change",()=>{
       if(cb.checked) state.visible.add(cb.dataset.k); else state.visible.delete(cb.dataset.k);
       state.visible.add("Navn"); saveVisible(); buildHeader(); render();
     }));
     const apply=keys=>{ state.visible=new Set(keys); state.visible.add("Navn"); saveVisible(); buildHeader(); render(); openCols(); };
+    $("ck-std").addEventListener("click",()=>apply(DEFAULT_VISIBLE));
     $("ck-all").addEventListener("click",()=>apply(ALL_KEYS));
-    $("ck-min").addEventListener("click",()=>apply(MINIMAL));
     openModal("Vælg kolonner");
   }
 

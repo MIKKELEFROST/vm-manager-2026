@@ -17,7 +17,8 @@ Værktøjslinjen har desuden:
 - **⚽ Team of the Round** — popup med en 3-4-3 (3 angreb · 4 midtbane · 3 forsvar · 1 keeper) bygget af spillerne
   med størst Vækst pr. position (spillere "ude af spil" udeladt). Beregnes live af de aktuelle data.
 - **Kolonner** — popup hvor man til/fravælger viste kolonner (Navn er altid med). Valget gemmes i browseren
-  (localStorage) og styrer både tabellen og CSV-eksporten. Presets: "Vis alle" og "Kun nøgletal".
+  (localStorage) og styrer både tabellen og CSV-eksporten. Presets: "Standard" og "Vis alle".
+  Standard-visningen er Navn, Pris, Vækst, Popularitet, Program R1-3 og Runde 1-3.
 
 | Kilde | Kolonner |
 |------|----------|
