@@ -88,6 +88,12 @@
   .down{color:var(--warn);font-weight:700}
   .flat{color:var(--muted)}
   .bar{display:inline-block;height:7px;border-radius:4px;background:var(--brand);vertical-align:middle;margin-left:8px;min-width:2px}
+  .tbar{background:#e8821e}
+  .rchart{display:block;margin:4px auto 2px}
+  .rchart text{font-family:var(--sans)}
+  .rc-v{font-size:12px;font-weight:800}
+  .rc-r{font-size:11px;fill:var(--muted);font-weight:700}
+  .rc-na{font-size:10.5px;fill:var(--muted)}
   .fix{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12.5px;font-weight:700;white-space:nowrap}
   .fix .fxd{font-weight:500;opacity:.7;font-size:11.5px;margin-left:4px}
   .fdr-5{background:#f6cfcb;color:#7d1a13}
@@ -352,6 +358,7 @@ const DATASET = __DATASET__;
   }
   const maxVaekst = ROWS.reduce((m,r)=>Math.max(m, r["Vækst"]||0),0);
   const maxVI = ROWS.reduce((m,r)=>Math.max(m, r["Værdi-indeks"]||0),0);
+  const maxTrend = ROWS.reduce((m,r)=>Math.max(m, r["Tendens"]||0),0);
   $("subline").textContent = "Interaktivt datasæt · Kilde: Holdet.dk · VM Manager 2026";
   $("pills").innerHTML = [
     ['Spillere', nf.format(ROWS.length)],
@@ -372,9 +379,9 @@ const DATASET = __DATASET__;
 
   // ---- State ----
   // ---- Column visibility (persisted) ----
-  const VKEY="holdet_visible_v2";
+  const VKEY="holdet_visible_v3";
   const ALL_KEYS=COLS.map(c=>c.key);
-  const DEFAULT_VISIBLE=["Navn","Pris","Vækst","Popularitet","Program R1-3","Runde 1","Runde 2","Runde 3"];
+  const DEFAULT_VISIBLE=["Navn","Pris","Vækst","Tendens","Popularitet","Program R1-3","Runde 1","Runde 2","Runde 3"];
   function loadVisible(){
     try{ const s=JSON.parse(localStorage.getItem(VKEY)); if(Array.isArray(s)){ const set=new Set(s.filter(k=>ALL_KEYS.includes(k))); set.add("Navn"); if(set.size>1) return set; } }catch(e){}
     return new Set(DEFAULT_VISIBLE);
@@ -415,6 +422,11 @@ const DATASET = __DATASET__;
     if(col.key==="Program R1-3" && typeof v==="number"){
       const c=v<=1.66?"fdr-5":(v<=2.33?"fdr-3":"fdr-1");
       return `<span class="fix ${c}" title="Samlet sværhedsgrad runde 1-3 (1=svær … 3=let)">${nf1.format(v)}</span>`;
+    }
+    if(col.key==="Tendens"){
+      if(typeof v!=="number") return '<span class="muted">–</span>';
+      const w=Math.max(2,Math.round(v/(maxTrend||1)*60));
+      return `${nf.format(v)}<span class="bar tbar" style="width:${w}px"></span>`;
     }
     return fmt(col,v);
   }
@@ -615,6 +627,25 @@ const DATASET = __DATASET__;
   // ---- Player detail modal ----
   function pdStat(k,v){ return `<div class="pd-stat"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
   function money(v){ return v==null?'–':'€'+nf.format(v); }
+  function roundChart(p){
+    const rounds=[1,2,3];
+    const data=rounds.map(n=>({n, played:ROUNDS_PLAYED.has(n), g:p["VækstR"+n]}));
+    const maxAbs=Math.max(1,...data.map(d=>typeof d.g==="number"?Math.abs(d.g):0));
+    const colW=86, H=132, mid=72, barW=44, maxBar=50, W=colW*rounds.length;
+    const parts=data.map((d,i)=>{
+      const cx=i*colW+colW/2, x=cx-barW/2;
+      const rLbl=`<text class="rc-r" x="${cx}" y="${H-6}" text-anchor="middle">R${d.n}</text>`;
+      if(!d.played || typeof d.g!=="number")
+        return `<rect x="${x}" y="${mid-1}" width="${barW}" height="2" fill="#d7dde3"/>`+
+               `<text class="rc-na" x="${cx}" y="${mid-9}" text-anchor="middle">ikke spillet</text>`+rLbl;
+      const h=Math.max(2,Math.round(Math.abs(d.g)/maxAbs*maxBar));
+      const up=d.g>=0, y=up?mid-h:mid, col=d.g>0?"#0a7d3c":(d.g<0?"#c0392b":"#9aa6b2");
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${col}"/>`+
+             `<text class="rc-v" x="${cx}" y="${up?y-6:y+h+14}" text-anchor="middle" fill="${col}">${kFmt(d.g)}</text>`+rLbl;
+    }).join("");
+    return `<svg class="rchart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%">`+
+      `<line x1="0" y1="${mid}" x2="${W}" y2="${mid}" stroke="#e2e7ec"/>${parts}</svg>`;
+  }
   function openPlayer(p){
     if(!p) return;
     const posChip=p.Position?`<span class="chip pos-${p.Position}">${escapeHtml(p.Position)}</span>`:"";
@@ -627,10 +658,6 @@ const DATASET = __DATASET__;
       pdStat("Popularitet", p.Popularitet!=null?nf1.format(p.Popularitet*100)+" %":'–'),
       pdStat("Markedsværdi", money(p.Markedsværdi)),
     ].join("");
-    const perRound=[1,2,3].map(n=>{
-      const played=ROUNDS_PLAYED.has(n), g=p["VækstR"+n];
-      return pdStat("Runde "+n, played?(typeof g==="number"?deltaHtml(g):'<span class="muted">–</span>'):'<span class="muted">ikke spillet endnu</span>');
-    }).join("");
     const vm=(p.Gruppe!=null)?[
       pdStat("Gruppe", escapeHtml(p.Gruppe)),
       pdStat("Placering", p.VMPlac==null?'–':p.VMPlac),
@@ -648,7 +675,7 @@ const DATASET = __DATASET__;
     modalBody.innerHTML=
       `<div class="pd-head">${posChip}<span class="pd-country">${escapeHtml(p.Land||"")}</span>${out}</div>`+
       `<div class="pd-sec"><h3>Værdi &amp; form</h3><div class="pd-grid">${vForm}</div></div>`+
-      `<div class="pd-sec"><h3>Vækst pr. runde</h3><div class="pd-grid">${perRound}</div></div>`+
+      `<div class="pd-sec"><h3>Vækst pr. runde</h3>${roundChart(p)}</div>`+
       `<div class="pd-sec"><h3>VM — hold (gruppespil)</h3><div class="pd-grid">${vm}</div></div>`+
       `<div class="pd-sec"><h3>Kampprogram</h3>${fixHtml||'<span class="muted">–</span>'}</div>`+
       `<div class="pd-note">Holdet udstiller ikke individuelle kamp-stats (mål/assist) i de offentlige data — <b>vækst</b> er nettoeffekten af spillerens præstation og købs/salgspres. <button class="ghost" id="pd-points">Se pointsystemet</button></div>`;

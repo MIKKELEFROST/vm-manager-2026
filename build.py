@@ -51,6 +51,8 @@ COLS = [
      "hint": "Prisændring i runde 2 (vises når runden er spillet)"},
     {"key": "VækstR3",      "label": "Vækst R3",      "type": "delta",
      "hint": "Prisændring i runde 3 (vises når runden er spillet)"},
+    {"key": "Tendens",      "label": "Tendens",       "type": "int",
+     "hint": "Handelstendens — hvor meget spilleren købes lige nu (højere = mere efterspurgt)"},
     {"key": "Værdi-indeks", "label": "Værdi-indeks",  "type": "float",
      "hint": "Markedsværdi delt med pris — værdi for pengene"},
     {"key": "Popularitet",  "label": "Popularitet",   "type": "pct",
@@ -171,12 +173,12 @@ def person_norm_map(api):
 
 
 def parse_round(rj, pmap):
-    """round-players json -> {normName: priceChange}; empty dict if round not played yet."""
+    """round-players json -> {normName: {pc, trend}}; empty dict if round not played yet."""
     out = {}
     for it in rj.get("items", []):
         nn = pmap.get(str(it.get("personId")))
-        if nn and it.get("priceChange") is not None:
-            out[nn] = it["priceChange"]
+        if nn:
+            out[nn] = {"pc": it.get("priceChange"), "trend": it.get("trend")}
     return out
 
 
@@ -197,7 +199,7 @@ def parse_standings(st):
     return teams
 
 
-def merge(rows, live, standings, round_growth):
+def merge(rows, live, standings, round_growth, trend_map):
     matched = 0
     for obj in rows:
         nn = norm(obj["Navn"])
@@ -216,7 +218,10 @@ def merge(rows, live, standings, round_growth):
             obj["startPris"] = None
         # per-round growth (priceChange) — None until the round is played
         for n in ROUNDS:
-            obj["VækstR" + str(n)] = (round_growth.get(n) or {}).get(nn)
+            rec = (round_growth.get(n) or {}).get(nn)
+            obj["VækstR" + str(n)] = rec["pc"] if rec else None
+        tr = trend_map.get(nn)
+        obj["Tendens"] = tr["trend"] if tr else None
         # VM team stats by Danish land name
         vm = standings.get(obj.get("Land"))
         obj["Gruppe"]        = vm["group"]   if vm else None
@@ -266,6 +271,8 @@ def main():
             round_growth[n] = rg
             if rg:
                 rounds_played.append(n)
+        # trend = buy-demand from the most recently played round
+        trend_map = round_growth.get(max(rounds_played)) if rounds_played else {}
     except Exception as e:
         print(f"ERROR: API fetch failed ({e}); leaving {OUTPUT} unchanged", file=sys.stderr)
         return 1
@@ -274,7 +281,7 @@ def main():
               file=sys.stderr)
         return 1
 
-    matched = merge(rows, live, standings, round_growth)
+    matched = merge(rows, live, standings, round_growth, trend_map or {})
     stamp = now_stamp()
     iso = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     size = render(rows, stamp, iso, rounds_played)

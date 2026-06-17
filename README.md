@@ -23,6 +23,11 @@ Værktøjslinjen har desuden:
   kort, holdresultat osv.) + forklaring af præstation vs. handelspres. Kilde: FantasyLeague.gg / Holdets fodbold-model.
 - **Spiller-popup** — klik på en spiller for værdi/form, vækst pr. runde, VM-holdstats og kampprogram.
 
+### Handelstendens
+Kolonnen **Tendens** (`trend` fra seneste spillede runde) viser hvor meget en spiller bliver købt lige nu
+(0 = ingen efterspørgsel; højere = mere efterspurgt) — et leading-signal for kommende prisstigning.
+Vises med orange "heat"-bjælke og er med i standard-visningen.
+
 ### Spillede runder & vækst pr. runde
 Per-runde-vækst hentes fra `/games/616/rounds/{n}/players` (`priceChange`). En spillet runde markeres i kampprogrammet
 med ✓ og rundens vækst (fx ▲ +620k); runder der ikke er spillet endnu viser kun modstander + dato. `meta.roundsPlayed`
